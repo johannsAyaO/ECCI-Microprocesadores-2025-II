@@ -1,0 +1,75 @@
+#pragma config FOSC = INTIO67
+#pragma config PLLCFG = OFF
+#pragma config PRICLKEN = ON
+#pragma config WDTEN = OFF
+#pragma config PWRTEN = OFF
+#pragma config BOREN = OFF
+#pragma config MCLRE = EXTMCLR
+#pragma config PBADEN = OFF
+
+#define _XTAL_FREQ 16000000UL
+
+#include <xc.h>
+#include <stdio.h>
+#include "i2c.h"
+#include "i2c_lcd.h"
+#include "uart.h"
+
+// -------- ADC SOLO VOLTAJE --------
+void ADC_Init(void) {
+    ANSELBbits.ANSB0 = 1;   // AN0 analogico
+    TRISBbits.TRISB0 = 1;
+
+    ADCON0 = 0b00000001;    // Canal AN0, ADC encendido
+    ADCON1 = 0b00000000;    // Vref = VDD/VSS
+    ADCON2 = 0b10101010;    // Right justify, Tacq, Fosc/32
+}
+
+uint16_t ADC_Read(void) {
+    ADCON0bits.GO = 1;
+    while (ADCON0bits.GO);
+    return (ADRESH << 8) | ADRESL;
+}
+
+// -------- MAIN --------
+void main(void)
+{
+    OSCCON = 0b01110000; // 16 MHz
+
+    // ---------- IMPORTANTE PARA I2C ----------
+    ANSELC = 0;
+    TRISC3 = 1;  // SCL
+    TRISC4 = 1;  // SDA
+    // -----------------------------------------
+
+    I2C_Master_Init(100000);
+    __delay_ms(50);
+
+    lcd_init();
+    __delay_ms(50);
+
+    UART_Init();
+    ADC_Init();
+
+    char buffer[20];
+
+    while(1)
+    {
+        uint16_t adc = ADC_Read();
+        float volt = (adc * 5.0) / 1023.0;
+
+        lcd_clear();
+        lcd_set_cursor(0, 0);
+        lcd_write_string("Voltaje:");
+
+        lcd_set_cursor(1, 0);
+        sprintf(buffer, "%.2f V  ", volt);
+        lcd_write_string(buffer);
+
+        UART_WriteString("Voltaje = ");
+        sprintf(buffer, "%.2f V\r\n", volt);
+        UART_WriteString(buffer);
+
+        __delay_ms(400);
+    }
+}
